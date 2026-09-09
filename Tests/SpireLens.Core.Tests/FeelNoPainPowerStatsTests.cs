@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -21,12 +22,22 @@ public class FeelNoPainPowerStatsTests
 {
     private const string FeelNoPainPowerId = "POWER.FEEL_NO_PAIN";
 
-    private static readonly MethodInfo AppendFeelNoPainPowerStatsMethod =
+    // #309 folded the per-power appenders into two shared renderers: the
+    // canonical full view a shared meta-power record shows, and the compact
+    // summary a physical copy of that Power card shows.
+    private static readonly MethodInfo AppendCanonicalMetaPowerStatsMethod =
         typeof(CardHoverShowPatch).GetMethod(
-            "AppendFeelNoPainPowerStats",
+            "AppendCanonicalMetaPowerStats",
             BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException(
-            "AppendFeelNoPainPowerStats not found.");
+            "AppendCanonicalMetaPowerStats not found.");
+
+    private static readonly MethodInfo AppendPhysicalMetaPowerSummaryMethod =
+        typeof(CardHoverShowPatch).GetMethod(
+            "AppendPhysicalMetaPowerSummary",
+            BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException(
+            "AppendPhysicalMetaPowerSummary not found.");
 
     [Fact]
     [Trait("Category", "RequiresLiveGame")]
@@ -89,19 +100,22 @@ public class FeelNoPainPowerStatsTests
     [Fact]
     public void FeelNoPainTooltip_ShowsBlockPerActiveTurn()
     {
+        // Resolve through the registry rather than naming the id here:
+        // ids come from the game's types, so a hand-written constant
+        // silently stops matching when a type is renamed.
+        var definition = MetaPowerRegistry.All.Single(
+            candidate => candidate.DisplayName == "Feel No Pain");
         var sb = new StringBuilder();
-        var card = (FeelNoPain)RuntimeHelpers.GetUninitializedObject(
-            typeof(FeelNoPain));
         var metaStats = new RunMetaStats();
-        metaStats.PowerAggregates[FeelNoPainPowerId] =
+        metaStats.PowerAggregates[definition.PowerId] =
             CreateAggregate(block: 36m, turns: 6);
 
-        _ = AppendFeelNoPainPowerStatsMethod.Invoke(
+        _ = AppendCanonicalMetaPowerStatsMethod.Invoke(
             null,
-            new object?[] { sb, card, metaStats });
+            [sb, definition, metaStats]);
 
         var body = sb.ToString();
-        Assert.Contains("added / active turn", body);
+        Assert.Contains("Avg block gained / active turn", body);
         Assert.Contains("[b]6[/b]", body);
     }
 
@@ -112,5 +126,10 @@ public class FeelNoPainPowerStatsTests
             DisplayName = "Feel No Pain",
             BlockGained = block,
             TurnsActive = turns,
+            // #309 moved the averages onto the shared Meta* turn
+            // counters. Mirror the legacy fixture values onto them so the
+            // expected averages below still mean what they meant before.
+            MetaActiveTurns = turns,
+            RateBlockGained = block,
         };
 }

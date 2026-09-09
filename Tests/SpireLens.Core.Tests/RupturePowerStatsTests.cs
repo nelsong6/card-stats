@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -21,12 +22,22 @@ public class RupturePowerStatsTests
 {
     private const string RupturePowerId = "POWER.RUPTURE";
 
-    private static readonly MethodInfo AppendRupturePowerStatsMethod =
+    // #309 folded the per-power appenders into two shared renderers: the
+    // canonical full view a shared meta-power record shows, and the compact
+    // summary a physical copy of that Power card shows.
+    private static readonly MethodInfo AppendCanonicalMetaPowerStatsMethod =
         typeof(CardHoverShowPatch).GetMethod(
-            "AppendRupturePowerStats",
+            "AppendCanonicalMetaPowerStats",
             BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException(
-            "AppendRupturePowerStats not found.");
+            "AppendCanonicalMetaPowerStats not found.");
+
+    private static readonly MethodInfo AppendPhysicalMetaPowerSummaryMethod =
+        typeof(CardHoverShowPatch).GetMethod(
+            "AppendPhysicalMetaPowerSummary",
+            BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException(
+            "AppendPhysicalMetaPowerSummary not found.");
 
     [Fact]
     public void PowerAggregate_RuptureFields_DefaultAndSerialize()
@@ -87,21 +98,24 @@ public class RupturePowerStatsTests
     [Fact]
     public void RuptureTooltip_ProjectsStrengthAndPerActiveTurn()
     {
+        // Resolve through the registry rather than naming the id here:
+        // ids come from the game's types, so a hand-written constant
+        // silently stops matching when a type is renamed.
+        var definition = MetaPowerRegistry.All.Single(
+            candidate => candidate.DisplayName == "Rupture");
         var sb = new StringBuilder();
-        var card = (Rupture)RuntimeHelpers.GetUninitializedObject(
-            typeof(Rupture));
         var metaStats = new RunMetaStats();
-        metaStats.PowerAggregates[RupturePowerId] =
+        metaStats.PowerAggregates[definition.PowerId] =
             CreateAggregate(strengthGained: 18m, turnsActive: 6);
 
-        _ = AppendRupturePowerStatsMethod.Invoke(
+        _ = AppendCanonicalMetaPowerStatsMethod.Invoke(
             null,
-            new object?[] { sb, card, metaStats });
+            [sb, definition, metaStats]);
 
         var body = sb.ToString();
         Assert.Contains("Strength gained", body);
         Assert.Contains("[b]18[/b]", body);
-        Assert.Contains("Strength gained / active turn", body);
+        Assert.Contains("Avg strength gained / active turn", body);
         Assert.Contains("[b]3[/b]", body);
     }
 
@@ -143,6 +157,11 @@ public class RupturePowerStatsTests
             DisplayName = "Rupture",
             StrengthGained = strengthGained,
             TurnsActive = turnsActive,
+            // #309 moved the averages onto the shared Meta* turn
+            // counters. Mirror the legacy fixture values onto them so the
+            // expected averages below still mean what they meant before.
+            MetaActiveTurns = turnsActive,
+            RateStrengthGained = strengthGained,
         };
 
     private static void AssertAggregate(

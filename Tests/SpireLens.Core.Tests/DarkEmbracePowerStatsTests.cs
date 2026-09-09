@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -23,12 +24,22 @@ public class DarkEmbracePowerStatsTests
 {
     private const string DarkEmbracePowerId = "POWER.DARK_EMBRACE";
 
-    private static readonly MethodInfo AppendDarkEmbracePowerStatsMethod =
+    // #309 folded the per-power appenders into two shared renderers: the
+    // canonical full view a shared meta-power record shows, and the compact
+    // summary a physical copy of that Power card shows.
+    private static readonly MethodInfo AppendCanonicalMetaPowerStatsMethod =
         typeof(CardHoverShowPatch).GetMethod(
-            "AppendDarkEmbracePowerStats",
+            "AppendCanonicalMetaPowerStats",
             BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException(
-            "AppendDarkEmbracePowerStats not found.");
+            "AppendCanonicalMetaPowerStats not found.");
+
+    private static readonly MethodInfo AppendPhysicalMetaPowerSummaryMethod =
+        typeof(CardHoverShowPatch).GetMethod(
+            "AppendPhysicalMetaPowerSummary",
+            BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException(
+            "AppendPhysicalMetaPowerSummary not found.");
 
     [Fact]
     public void DarkEmbraceImmediateDraw_RequiresOwnerAndNonEtherealExhaust()
@@ -106,22 +117,25 @@ public class DarkEmbracePowerStatsTests
     [Fact]
     public void DarkEmbraceTooltip_UsesDistinctTurnDenominators()
     {
+        // Resolve through the registry rather than naming the id here:
+        // ids come from the game's types, so a hand-written constant
+        // silently stops matching when a type is renamed.
+        var definition = MetaPowerRegistry.All.Single(
+            candidate => candidate.DisplayName == "Dark Embrace");
         var sb = new StringBuilder();
-        var card = (DarkEmbrace)RuntimeHelpers.GetUninitializedObject(
-            typeof(DarkEmbrace));
         var metaStats = new RunMetaStats();
-        metaStats.PowerAggregates[DarkEmbracePowerId] =
+        metaStats.PowerAggregates[definition.PowerId] =
             CreateAggregate(cards: 18, activeTurns: 6, combatTurns: 9, combats: 3);
 
-        _ = AppendDarkEmbracePowerStatsMethod.Invoke(
+        _ = AppendCanonicalMetaPowerStatsMethod.Invoke(
             null,
-            new object?[] { sb, card, metaStats });
+            [sb, definition, metaStats]);
 
         var body = sb.ToString();
         Assert.Contains("cards drawn", body);
-        Assert.Contains("avg / active turn", body);
-        Assert.Contains("avg / turn", body);
-        Assert.Contains("avg / combat", body);
+        Assert.Contains("Avg cards drawn / active turn", body);
+        Assert.Contains("Avg cards drawn / turn", body);
+        Assert.Contains("Avg cards drawn / active application-turn", body);
         Assert.Contains("[b]3[/b]", body);
         Assert.Contains("[b]2[/b]", body);
         Assert.Contains("[b]6[/b]", body);
@@ -178,5 +192,12 @@ public class DarkEmbracePowerStatsTests
             TurnsActive = activeTurns,
             DarkEmbraceCombatTurns = combatTurns,
             CombatsActive = combats,
+            // #309 moved the averages onto the shared Meta* turn
+            // counters. Mirror the legacy fixture values onto them so the
+            // expected averages below still mean what they meant before.
+            MetaDeckTurns = combatTurns,
+            RateDarkEmbraceCardsDrawn = cards,
+            MetaActiveTurns = activeTurns,
+            MetaActiveApplicationTurns = combats,
         };
 }

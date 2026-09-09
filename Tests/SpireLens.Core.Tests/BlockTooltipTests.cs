@@ -252,7 +252,10 @@ public class BlockTooltipTests
         _ = AppendCompactBodyMethod.Invoke(null, new object?[] { sb, cardModel, agg });
         var text = sb.ToString();
 
-        Assert.Contains("Orbs created", text);
+        // "Orbs" renders as an orb concept icon now, leaving "created" as the
+        // residual label text, so identify the row by its hint rather than by
+        // wording the vocabulary has replaced.
+        Assert.Contains("[hint=\"created\"]", text);
         Assert.Contains("[b]4[/b]", text);
     }
 

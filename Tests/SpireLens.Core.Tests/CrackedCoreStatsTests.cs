@@ -260,7 +260,7 @@ public class CrackedCoreStatsTests
         Assert.Equal("Infused Core", title);
         Assert.Contains("res://images/orbs/lightning_orb.png", body);
         Assert.Contains("starting Lightning orb was evoked", body);
-        Assert.Contains("Damage dealt", body);
+        Assert.Contains("Unblocked damage dealt", body);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -15,11 +16,22 @@ public class JugglingPowerStatsTests
 {
     private const string JugglingPowerId = "POWER.JUGGLING";
 
-    private static readonly MethodInfo AppendJugglingPowerStatsMethod =
+    // #309 folded the per-power appenders into two shared renderers: the
+    // canonical full view a shared meta-power record shows, and the compact
+    // summary a physical copy of that Power card shows.
+    private static readonly MethodInfo AppendCanonicalMetaPowerStatsMethod =
         typeof(CardHoverShowPatch).GetMethod(
-            "AppendJugglingPowerStats",
+            "AppendCanonicalMetaPowerStats",
             BindingFlags.NonPublic | BindingFlags.Static)
-        ?? throw new InvalidOperationException("AppendJugglingPowerStats not found.");
+        ?? throw new InvalidOperationException(
+            "AppendCanonicalMetaPowerStats not found.");
+
+    private static readonly MethodInfo AppendMetaPowerLifetimeStatsMethod =
+        typeof(CardHoverShowPatch).GetMethod(
+            "AppendMetaPowerLifetimeStats",
+            BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException(
+            "AppendMetaPowerLifetimeStats not found.");
 
     [Theory]
     [InlineData(-1, 0)]
@@ -121,12 +133,12 @@ public class JugglingPowerStatsTests
         var body = AppendJugglingPowerStats(CreateRepresentativeAggregate(), compact: false);
 
         Assert.Contains("Total attacks copied", body);
-        Assert.Contains("commons copied", body);
-        Assert.Contains("uncommons copied", body);
-        Assert.Contains("rares copied", body);
-        Assert.Contains("avg copies per turn", body);
+        Assert.Contains("Common attacks copied", body);
+        Assert.Contains("Uncommon attacks copied", body);
+        Assert.Contains("Rare attacks copied", body);
+        Assert.Contains("Avg attacks copied / turn", body);
         Assert.Contains("[b]1.4[/b]", body);
-        Assert.Contains("avg copies per combat", body);
+        Assert.Contains("Avg attacks copied / active turn", body);
         Assert.Contains("[b]3.5[/b]", body);
     }
 
@@ -136,9 +148,9 @@ public class JugglingPowerStatsTests
         var body = AppendJugglingPowerStats(CreateRepresentativeAggregate(), compact: true);
 
         Assert.Contains("Total attacks copied", body);
-        Assert.DoesNotContain("commons copied", body);
-        Assert.DoesNotContain("uncommons copied", body);
-        Assert.DoesNotContain("rares copied", body);
+        Assert.DoesNotContain("Common attacks copied", body);
+        Assert.DoesNotContain("unCommon attacks copied", body);
+        Assert.DoesNotContain("Rare attacks copied", body);
         Assert.DoesNotContain("avg copies per turn", body);
         Assert.DoesNotContain("avg copies per combat", body);
     }
@@ -163,6 +175,12 @@ public class JugglingPowerStatsTests
             RareAttacksCopied = 2,
             TurnsActive = 5,
             CombatsActive = 2,
+            // #309 moved the averages onto the shared Meta* turn
+            // counters. Mirror the legacy fixture values onto them so the
+            // expected averages below still mean what they meant before.
+            MetaDeckTurns = 5,
+            RateAttacksCopied = 7,
+            MetaActiveTurns = 2,
         };
 
     private static void AssertRepresentativeAggregate(PowerAggregate agg)
@@ -179,13 +197,31 @@ public class JugglingPowerStatsTests
 
     private static string AppendJugglingPowerStats(PowerAggregate agg, bool compact)
     {
+        // Resolve through the registry rather than naming the id here:
+        // ids come from the game's types, so a hand-written constant
+        // silently stops matching when a type is renamed.
+        var definition = MetaPowerRegistry.All.Single(
+            candidate => candidate.DisplayName == "Juggling");
         var sb = new StringBuilder();
         var card = (Juggling)RuntimeHelpers.GetUninitializedObject(typeof(Juggling));
         var metaStats = new RunMetaStats();
-        metaStats.PowerAggregates[JugglingPowerId] = agg;
-        _ = AppendJugglingPowerStatsMethod.Invoke(
-            null,
-            new object?[] { sb, card, metaStats, compact });
+        metaStats.PowerAggregates[definition.PowerId] = agg;
+        if (compact)
+        {
+            // Compact rows, as the physical Power card shows them. Resolving a
+            // card to its definition needs the game's model db, so that step is
+            // covered by MetaPowerRegistry's tests rather than faked here.
+            _ = AppendMetaPowerLifetimeStatsMethod.Invoke(
+                null,
+                [sb, definition, agg, metaStats, false]);
+        }
+        else
+        {
+            // The shared meta-power record shows the canonical full view.
+            _ = AppendCanonicalMetaPowerStatsMethod.Invoke(
+                null,
+                [sb, definition, metaStats]);
+        }
         return sb.ToString();
     }
 }

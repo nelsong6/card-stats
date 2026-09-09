@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -14,12 +15,22 @@ public class EntropyPowerStatsTests
 {
     private const string EntropyPowerId = "POWER.ENTROPY";
 
-    private static readonly MethodInfo AppendEntropyPowerStatsMethod =
+    // #309 folded the per-power appenders into two shared renderers: the
+    // canonical full view a shared meta-power record shows, and the compact
+    // summary a physical copy of that Power card shows.
+    private static readonly MethodInfo AppendCanonicalMetaPowerStatsMethod =
         typeof(CardHoverShowPatch).GetMethod(
-            "AppendEntropyPowerStats",
+            "AppendCanonicalMetaPowerStats",
             BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException(
-            "AppendEntropyPowerStats not found.");
+            "AppendCanonicalMetaPowerStats not found.");
+
+    private static readonly MethodInfo AppendMetaPowerLifetimeStatsMethod =
+        typeof(CardHoverShowPatch).GetMethod(
+            "AppendMetaPowerLifetimeStats",
+            BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException(
+            "AppendMetaPowerLifetimeStats not found.");
 
     [Fact]
     public void EntropyGeneratedCards_CountOnlySuccessfulObservedResults()
@@ -99,26 +110,28 @@ public class EntropyPowerStatsTests
             CreateRepresentativeAggregate(),
             compact: false);
 
-        Assert.Contains("Times Chains of Binding broken", body);
+        Assert.Contains("Chains of Binding broken", body);
         Assert.Contains("Commons generated", body);
         Assert.Contains("Uncommons generated", body);
         Assert.Contains("Rares generated", body);
-        Assert.Contains("Avg cards generated per combat", body);
+        Assert.Contains("Avg cards generated / active turn", body);
         Assert.Contains("[b]3.5[/b]", body);
     }
 
     [Fact]
-    public void EntropyTooltip_CompactViewKeepsOnlyChainBreakCount()
+    // The compact view now leads with the power's primary outcome rather
+    // than its chain-break count; the breakdown stays full-view only.
+    public void EntropyTooltip_CompactViewKeepsOnlyPrimaryOutcome()
     {
         var body = AppendEntropyPowerStats(
             CreateRepresentativeAggregate(),
             compact: true);
 
-        Assert.Contains("Times Chains of Binding broken", body);
+        Assert.Contains("Cards generated", body);
         Assert.DoesNotContain("Commons generated", body);
         Assert.DoesNotContain("Uncommons generated", body);
         Assert.DoesNotContain("Rares generated", body);
-        Assert.DoesNotContain("Avg cards generated per combat", body);
+        Assert.DoesNotContain("Avg cards generated / active turn", body);
     }
 
     private static PowerAggregate CreateRepresentativeAggregate()
@@ -132,6 +145,11 @@ public class EntropyPowerStatsTests
             EntropyUncommonCardsGenerated = 2,
             EntropyRareCardsGenerated = 2,
             CombatsActive = 2,
+            // #309 moved the averages onto the shared Meta* turn
+            // counters. Mirror the legacy fixture values onto them so the
+            // expected averages below still mean what they meant before.
+            MetaActiveTurns = 2,
+            RateEntropyCardsGenerated = 7,
         };
 
     private static void AssertRepresentativeAggregate(PowerAggregate agg)
@@ -150,14 +168,32 @@ public class EntropyPowerStatsTests
         PowerAggregate agg,
         bool compact)
     {
+        // Resolve through the registry rather than naming the id here:
+        // ids come from the game's types, so a hand-written constant
+        // silently stops matching when a type is renamed.
+        var definition = MetaPowerRegistry.All.Single(
+            candidate => candidate.DisplayName == "Entropy");
         var sb = new StringBuilder();
         var card = (Entropy)RuntimeHelpers.GetUninitializedObject(
             typeof(Entropy));
         var metaStats = new RunMetaStats();
-        metaStats.PowerAggregates[EntropyPowerId] = agg;
-        _ = AppendEntropyPowerStatsMethod.Invoke(
-            null,
-            new object?[] { sb, card, metaStats, compact });
+        metaStats.PowerAggregates[definition.PowerId] = agg;
+        if (compact)
+        {
+            // Compact rows, as the physical Power card shows them. Resolving a
+            // card to its definition needs the game's model db, so that step is
+            // covered by MetaPowerRegistry's tests rather than faked here.
+            _ = AppendMetaPowerLifetimeStatsMethod.Invoke(
+                null,
+                [sb, definition, agg, metaStats, false]);
+        }
+        else
+        {
+            // The shared meta-power record shows the canonical full view.
+            _ = AppendCanonicalMetaPowerStatsMethod.Invoke(
+                null,
+                [sb, definition, metaStats]);
+        }
         return sb.ToString();
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -20,11 +21,22 @@ public class ViciousPowerStatsTests
 {
     private const string ViciousPowerId = "POWER.VICIOUS";
 
-    private static readonly MethodInfo AppendViciousPowerStatsMethod =
+    // #309 folded the per-power appenders into two shared renderers: the
+    // canonical full view a shared meta-power record shows, and the compact
+    // summary a physical copy of that Power card shows.
+    private static readonly MethodInfo AppendCanonicalMetaPowerStatsMethod =
         typeof(CardHoverShowPatch).GetMethod(
-            "AppendViciousPowerStats",
+            "AppendCanonicalMetaPowerStats",
             BindingFlags.NonPublic | BindingFlags.Static)
-        ?? throw new InvalidOperationException("AppendViciousPowerStats not found.");
+        ?? throw new InvalidOperationException(
+            "AppendCanonicalMetaPowerStats not found.");
+
+    private static readonly MethodInfo AppendPhysicalMetaPowerSummaryMethod =
+        typeof(CardHoverShowPatch).GetMethod(
+            "AppendPhysicalMetaPowerSummary",
+            BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException(
+            "AppendPhysicalMetaPowerSummary not found.");
 
     [Fact]
     public void ViciousTrigger_RequiresPositiveOwnerAppliedVulnerable()
@@ -97,14 +109,18 @@ public class ViciousPowerStatsTests
     [Fact]
     public void ViciousTooltip_ProjectsSharedPowerCardsDrawn()
     {
+        // Resolve through the registry rather than naming the id here:
+        // ids come from the game's types, so a hand-written constant
+        // silently stops matching when a type is renamed.
+        var definition = MetaPowerRegistry.All.Single(
+            candidate => candidate.DisplayName == "Vicious");
         var sb = new StringBuilder();
-        var card = (Vicious)RuntimeHelpers.GetUninitializedObject(typeof(Vicious));
         var metaStats = new RunMetaStats();
-        metaStats.PowerAggregates[ViciousPowerId] = CreateAggregate(11);
+        metaStats.PowerAggregates[definition.PowerId] = CreateAggregate(11);
 
-        _ = AppendViciousPowerStatsMethod.Invoke(
+        _ = AppendCanonicalMetaPowerStatsMethod.Invoke(
             null,
-            new object?[] { sb, card, metaStats });
+            [sb, definition, metaStats]);
 
         Assert.Contains("cards drawn", sb.ToString());
         Assert.Contains("[b]11[/b]", sb.ToString());

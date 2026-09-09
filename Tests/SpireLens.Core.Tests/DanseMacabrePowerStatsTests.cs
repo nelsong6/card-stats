@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -19,12 +20,22 @@ public class DanseMacabrePowerStatsTests
 {
     private const string DanseMacabrePowerId = "POWER.DANSE_MACABRE";
 
-    private static readonly MethodInfo AppendDanseMacabrePowerStatsMethod =
+    // #309 folded the per-power appenders into two shared renderers: the
+    // canonical full view a shared meta-power record shows, and the compact
+    // summary a physical copy of that Power card shows.
+    private static readonly MethodInfo AppendCanonicalMetaPowerStatsMethod =
         typeof(CardHoverShowPatch).GetMethod(
-            "AppendDanseMacabrePowerStats",
+            "AppendCanonicalMetaPowerStats",
             BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException(
-            "AppendDanseMacabrePowerStats not found.");
+            "AppendCanonicalMetaPowerStats not found.");
+
+    private static readonly MethodInfo AppendMetaPowerLifetimeStatsMethod =
+        typeof(CardHoverShowPatch).GetMethod(
+            "AppendMetaPowerLifetimeStats",
+            BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException(
+            "AppendMetaPowerLifetimeStats not found.");
 
     [Fact]
     [Trait("Category", "RequiresLiveGame")]
@@ -145,15 +156,15 @@ public class DanseMacabrePowerStatsTests
             compact: false);
 
         Assert.Contains("Times triggered", body);
-        Assert.Contains("Avg triggers per turn once active", body);
+        Assert.Contains("Avg triggers / active turn", body);
         Assert.Contains("[b]1.5[/b]", body);
-        Assert.Contains("Avg triggers per combat", body);
+        Assert.Contains("Avg triggers / active application-turn", body);
         Assert.Contains("[b]3[/b]", body);
         Assert.Contains("Block gained", body);
         Assert.Contains("[b]45[/b]", body);
-        Assert.Contains("Avg block gained per turn once active", body);
+        Assert.Contains("Avg block gained / active turn", body);
         Assert.Contains("[b]7.5[/b]", body);
-        Assert.Contains("Avg block gained per combat", body);
+        Assert.Contains("Avg block gained / active application-turn", body);
         Assert.Contains("[b]15[/b]", body);
     }
 
@@ -179,6 +190,13 @@ public class DanseMacabrePowerStatsTests
             BlockGained = 45m,
             TurnsActive = 6,
             CombatsActive = 3,
+            // #309 moved the averages onto the shared Meta* turn
+            // counters. Mirror the legacy fixture values onto them so the
+            // expected averages below still mean what they meant before.
+            MetaActiveTurns = 6,
+            RateTimesTriggered = 9,
+            RateBlockGained = 45m,
+            MetaActiveApplicationTurns = 3,
         };
 
     private static void AssertRepresentativeAggregate(PowerAggregate agg)
@@ -195,14 +213,32 @@ public class DanseMacabrePowerStatsTests
         PowerAggregate agg,
         bool compact)
     {
+        // Resolve through the registry rather than naming the id here:
+        // ids come from the game's types, so a hand-written constant
+        // silently stops matching when a type is renamed.
+        var definition = MetaPowerRegistry.All.Single(
+            candidate => candidate.DisplayName == "Danse Macabre");
         var sb = new StringBuilder();
         var card = (DanseMacabre)RuntimeHelpers.GetUninitializedObject(
             typeof(DanseMacabre));
         var metaStats = new RunMetaStats();
-        metaStats.PowerAggregates[DanseMacabrePowerId] = agg;
-        _ = AppendDanseMacabrePowerStatsMethod.Invoke(
-            null,
-            new object?[] { sb, card, metaStats, compact });
+        metaStats.PowerAggregates[definition.PowerId] = agg;
+        if (compact)
+        {
+            // Compact rows, as the physical Power card shows them. Resolving a
+            // card to its definition needs the game's model db, so that step is
+            // covered by MetaPowerRegistry's tests rather than faked here.
+            _ = AppendMetaPowerLifetimeStatsMethod.Invoke(
+                null,
+                [sb, definition, agg, metaStats, false]);
+        }
+        else
+        {
+            // The shared meta-power record shows the canonical full view.
+            _ = AppendCanonicalMetaPowerStatsMethod.Invoke(
+                null,
+                [sb, definition, metaStats]);
+        }
         return sb.ToString();
     }
 }

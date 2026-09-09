@@ -109,7 +109,7 @@ public class MercuryHourglassStatsTests
         Assert.Contains("Kills", body);
         Assert.Contains(StatConceptGlossary.RenderHintedGlyph("targets_hit"), body);
         Assert.Contains("Avg damage per combat", body);
-        Assert.Contains("Avg activations per combat", body);
+        Assert.Contains("Average activations per combat", body);
         Assert.Contains("[b]6[/b]", body);
         Assert.Contains("[b]33[/b]", body);
         Assert.Contains("[b]24[/b]", body);
@@ -127,7 +127,7 @@ public class MercuryHourglassStatsTests
         });
 
         Assert.Contains("Avg damage per combat", body);
-        Assert.Contains("Avg activations per combat", body);
+        Assert.Contains("Average activations per combat", body);
         Assert.Contains("[b]0[/b]", body);
     }
 

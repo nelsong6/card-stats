@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -23,12 +24,22 @@ public class AggressionPowerStatsTests
 {
     private const string AggressionPowerId = "POWER.AGGRESSION";
 
-    private static readonly MethodInfo AppendAggressionPowerStatsMethod =
+    // #309 folded the per-power appenders into two shared renderers: the
+    // canonical full view a shared meta-power record shows, and the compact
+    // summary a physical copy of that Power card shows.
+    private static readonly MethodInfo AppendCanonicalMetaPowerStatsMethod =
         typeof(CardHoverShowPatch).GetMethod(
-            "AppendAggressionPowerStats",
+            "AppendCanonicalMetaPowerStats",
             BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException(
-            "AppendAggressionPowerStats not found.");
+            "AppendCanonicalMetaPowerStats not found.");
+
+    private static readonly MethodInfo AppendPhysicalMetaPowerSummaryMethod =
+        typeof(CardHoverShowPatch).GetMethod(
+            "AppendPhysicalMetaPowerSummary",
+            BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException(
+            "AppendPhysicalMetaPowerSummary not found.");
 
     [Fact]
     public void PowerAggregate_AggressionFields_DefaultAndSerialize()
@@ -98,16 +109,19 @@ public class AggressionPowerStatsTests
     [Fact]
     public void AggressionTooltip_ProjectsSharedPowerOutcomes()
     {
+        // Resolve through the registry rather than naming the id here:
+        // ids come from the game's types, so a hand-written constant
+        // silently stops matching when a type is renamed.
+        var definition = MetaPowerRegistry.All.Single(
+            candidate => candidate.DisplayName == "Aggression");
         var sb = new StringBuilder();
-        var card = (Aggression)RuntimeHelpers.GetUninitializedObject(
-            typeof(Aggression));
         var metaStats = new RunMetaStats();
-        metaStats.PowerAggregates[AggressionPowerId] =
+        metaStats.PowerAggregates[definition.PowerId] =
             CreateAggregate(cardsReturned: 8, cardsUpgraded: 5);
 
-        _ = AppendAggressionPowerStatsMethod.Invoke(
+        _ = AppendCanonicalMetaPowerStatsMethod.Invoke(
             null,
-            new object?[] { sb, card, metaStats });
+            [sb, definition, metaStats]);
 
         var body = sb.ToString();
         Assert.Contains("Cards returned to hand", body);

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -21,11 +22,22 @@ public class StampedePowerStatsTests
 {
     private const string StampedePowerId = "POWER.STAMPEDE";
 
-    private static readonly MethodInfo AppendStampedePowerStatsMethod =
+    // #309 folded the per-power appenders into two shared renderers: the
+    // canonical full view a shared meta-power record shows, and the compact
+    // summary a physical copy of that Power card shows.
+    private static readonly MethodInfo AppendCanonicalMetaPowerStatsMethod =
         typeof(CardHoverShowPatch).GetMethod(
-            "AppendStampedePowerStats",
+            "AppendCanonicalMetaPowerStats",
             BindingFlags.NonPublic | BindingFlags.Static)
-        ?? throw new InvalidOperationException("AppendStampedePowerStats not found.");
+        ?? throw new InvalidOperationException(
+            "AppendCanonicalMetaPowerStats not found.");
+
+    private static readonly MethodInfo AppendPhysicalMetaPowerSummaryMethod =
+        typeof(CardHoverShowPatch).GetMethod(
+            "AppendPhysicalMetaPowerSummary",
+            BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException(
+            "AppendPhysicalMetaPowerSummary not found.");
 
     [Fact]
     public void PowerAggregate_StampedeFields_DefaultAndSerialize()
@@ -96,19 +108,23 @@ public class StampedePowerStatsTests
     [Fact]
     public void StampedeTooltip_ProjectsSharedPowerTotals()
     {
+        // Resolve through the registry rather than naming the id here:
+        // ids come from the game's types, so a hand-written constant
+        // silently stops matching when a type is renamed.
+        var definition = MetaPowerRegistry.All.Single(
+            candidate => candidate.DisplayName == "Stampede");
         var sb = new StringBuilder();
-        var card = (Stampede)RuntimeHelpers.GetUninitializedObject(typeof(Stampede));
         var metaStats = new RunMetaStats();
-        metaStats.PowerAggregates[StampedePowerId] = CreateAggregate(
+        metaStats.PowerAggregates[definition.PowerId] = CreateAggregate(
             attacks: 9,
             common: 4,
             uncommon: 3,
             rare: 2,
             energySaved: 14);
 
-        _ = AppendStampedePowerStatsMethod.Invoke(
+        _ = AppendCanonicalMetaPowerStatsMethod.Invoke(
             null,
-            new object?[] { sb, card, metaStats, false });
+            [sb, definition, metaStats]);
 
         var body = sb.ToString();
         Assert.Contains("Attacks stampeded", body);

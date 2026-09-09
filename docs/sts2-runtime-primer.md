@@ -2087,6 +2087,29 @@ Card stats are exposed through Godot UI patches, not through game combat state a
 
 Important surfaces:
 
+- Adding text to a card face belongs in `CardModel.GetDescriptionForPile`, not
+  in the card's Godot nodes. `NCard.UpdateVisuals` asks the model for a string
+  and then does
+  `_descriptionLabel.SetTextAutoSize("[center]" + text + "[/center]")`, so a
+  postfix that appends to the returned string inherits the game's own
+  centring, font and auto-shrink, and is recomputed on every render.
+  `MegaRichTextLabel` auto-sizes between font sizes 8 and 100, so a longer
+  card simply shrinks.
+
+  Do not reach the same effect through `NCardHolder.SetCard` /
+  `ReassignToCard` / `Clear`. That is the base class for every card surface
+  including the combat hand, the holder is mid-construction when `SetCard`
+  fires — not yet parented, and `NGridCardHolder.CardModel` still reports the
+  PREVIOUS card until `UpdateCardModel` runs — and the grid recycles holders
+  while scrolling without going through any of the three. Working around that
+  means deferring a frame and then polling, and a deferred callback routinely
+  lands after its holder was freed. `GodotObject.IsInstanceValid` THROWS
+  `ObjectDisposedException` on a disposed wrapper rather than returning false,
+  so that exception escapes into whatever the game was doing — in practice,
+  cutting a five-card draw down to two. The card grid's holders are also
+  centred local visuals with size (0,0), so anchoring a child to them yields a
+  negative width and an invisible node.
+
 - Run-history `MapPointHistoryEntry.PlayerStats` already stores exact per-player
   `rest_site_choices`. Campfire summaries should read that list in map-point
   order, advance the displayed floor across act boundaries exactly as

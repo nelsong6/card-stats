@@ -717,6 +717,37 @@ public static class RunTracker
         }
     }
 
+    /// <summary>
+    /// Every point of card damage this run has dealt, committed plus whatever
+    /// the current combat has buffered. Denominator for per-card damage share,
+    /// so a card viewed mid-combat is measured against a total that includes
+    /// that combat rather than one that stops at the last room boundary.
+    ///
+    /// Counts card damage only. Relics that deal damage on their own are
+    /// tracked separately and are not part of what a deck's cards did.
+    /// </summary>
+    public static long GetTotalEffectiveCardDamage()
+    {
+        lock (_lock)
+        {
+            long total = 0;
+
+            if (_currentRun != null)
+            {
+                foreach (var aggregate in _currentRun.Aggregates.Values)
+                    total += aggregate.TotalEffective;
+            }
+
+            if (_pendingCombat != null)
+            {
+                foreach (var aggregate in _pendingCombat.CombatAggregates.Values)
+                    total += aggregate.TotalEffective;
+            }
+
+            return total;
+        }
+    }
+
     public static RunMetaStats GetEffectiveMetaStats()
     {
         lock (_lock)

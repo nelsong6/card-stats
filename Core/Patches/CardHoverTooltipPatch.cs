@@ -272,7 +272,8 @@ public static class CardHoverShowPatch
             agg,
             RunTracker.GetEffectiveMetaStats(),
             RunTracker.GetEtherealCardsPlayedThisCombat(),
-            GetSupermassiveCardsCreatedThisCombat(cardModel));
+            GetSupermassiveCardsCreatedThisCombat(cardModel),
+            RunTracker.GetTotalEffectiveCardDamage());
 
         // No footer. Previously we rendered "A4 · DEFECT · this run" here
         // as a mirror of SlayTheStats' filter-context footer — but they need
@@ -325,7 +326,12 @@ public static class CardHoverShowPatch
         if (agg.Removed)
             AppendRemovalLine(sb, agg);
 
-        AppendFullStatRows(sb, cardModel, agg, metaStats);
+        AppendFullStatRows(
+            sb,
+            cardModel,
+            agg,
+            metaStats,
+            totalCardDamageThisRun: TotalCardDamageIn(RunHistoryStatsContext.GetCurrentRunData()));
         return sb.ToString();
     }
 
@@ -344,13 +350,17 @@ public static class CardHoverShowPatch
         sb.Append($"[color=#b5b5b5]Removed {floor}{source}{cost}[/color]\n");
     }
 
+    private static long? TotalCardDamageIn(RunData? run)
+        => run?.Aggregates.Values.Sum(aggregate => (long)aggregate.TotalEffective);
+
     private static void AppendFullStatRows(
         StringBuilder sb,
         MegaCrit.Sts2.Core.Models.CardModel cardModel,
         CardAggregate agg,
         RunMetaStats metaStats,
         int? etherealCardsPlayedThisCombat = null,
-        int? cardsCreatedThisCombat = null)
+        int? cardsCreatedThisCombat = null,
+        long? totalCardDamageThisRun = null)
     {
         // Per-play averages — the actual "utility" signal. Guard against
         // div-by-zero for the unplayed case.
@@ -497,6 +507,18 @@ public static class CardHoverShowPatch
                         ? $"{(float)agg.TotalEffective / agg.TotalEnergySpent:F1}"
                         : $"{agg.TotalEffective} / 0{StatEnergyIcon.RenderInline(18)}",
                     "");
+            }
+
+            // Share of everything this run's cards dealt, with the ratio it
+            // came from so the percentage can be checked rather than trusted.
+            if (agg.TotalEffective > 0 && totalCardDamageThisRun is > 0)
+            {
+                var share = 100d * agg.TotalEffective / totalCardDamageThisRun.Value;
+                Row3(
+                    sb,
+                    "Damage share",
+                    $"{agg.TotalEffective} / {totalCardDamageThisRun.Value}",
+                    $"{share:F1}%");
             }
 
             _ = avgIntended;  // still computed above; silence unused warning

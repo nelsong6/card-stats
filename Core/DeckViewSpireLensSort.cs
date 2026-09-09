@@ -136,6 +136,12 @@ internal static class DeckViewSpireLensSort
                     : double.PositiveInfinity,
             tieBreak: agg => agg.TotalEffective,
             display: FormatDamagePerEnergy),
+        // Share of everything this run's cards have dealt. Ordering matches
+        // Total damage, since the denominator is the same for every card —
+        // the value is in reading how much of the run one card accounted for.
+        new DeckSortMetric("damage_share", "Damage share", GroupDamage,
+            agg => agg.TotalEffective,
+            display: FormatDamageShare),
         new DeckSortMetric("kills", "Kills", GroupDamage,
             agg => agg.Kills),
 
@@ -241,6 +247,7 @@ internal static class DeckViewSpireLensSort
             // historical deck, so its numbers must come from the archived run
             // rather than from whatever run is live now.
             var historical = RunHistoryDeckViewer.IsHistoricalDeckViewer(screen);
+            RefreshDamageShareTotal(historical);
 
             var cards = screen._cards;
             if (cards != null && cards.Count > 0)
@@ -345,6 +352,52 @@ internal static class DeckViewSpireLensSort
     {
         var aggregate = ResolveAggregate(card, historical);
         return aggregate == null || metric.TieBreak == null ? 0d : metric.TieBreak(aggregate);
+    }
+
+    /// <summary>
+    /// "18% (589 / 3271)" — the share, then the whole ratio it came from, so
+    /// the percentage can be checked rather than taken on trust.
+    ///
+    /// The denominator is refreshed each time the deck is re-rendered, from
+    /// the run actually on screen, and for the live run it includes the
+    /// current combat's buffered damage rather than stopping at the last room
+    /// boundary. It does not tick during a combat while the screen sits open.
+    /// </summary>
+    private static string FormatDamageShare(CardAggregate agg)
+    {
+        var total = _damageShareTotal;
+        if (total <= 0) return $"{agg.TotalEffective}";
+
+        var percent = 100d * agg.TotalEffective / total;
+        return $"{FormatValue(percent)}% ({agg.TotalEffective} / {total})";
+    }
+
+    private static long _damageShareTotal;
+
+    /// <summary>
+    /// Refresh the damage-share denominator for the run currently on screen.
+    /// The archived viewer must not be measured against the live run's total.
+    /// </summary>
+    private static void RefreshDamageShareTotal(bool historical)
+    {
+        try
+        {
+            if (!historical)
+            {
+                _damageShareTotal = RunTracker.GetTotalEffectiveCardDamage();
+                return;
+            }
+
+            var run = RunHistoryStatsContext.GetCurrentRunData();
+            _damageShareTotal = run == null
+                ? 0
+                : run.Aggregates.Values.Sum(aggregate => (long)aggregate.TotalEffective);
+        }
+        catch (Exception e)
+        {
+            CoreMain.Logger.Warn($"Damage-share total failed: {e.Message}");
+            _damageShareTotal = 0;
+        }
     }
 
     private static string FormatDamagePerEnergy(CardAggregate agg)

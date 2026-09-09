@@ -369,7 +369,12 @@ internal static class DeckViewSpireLensSort
         if (total <= 0) return $"{agg.TotalEffective}";
 
         var percent = 100d * agg.TotalEffective / total;
-        return $"{FormatValue(percent)}% ({agg.TotalEffective} / {total})";
+        // Break before the ratio rather than letting it wrap. Left to itself
+        // the line runs past the card's width on nearly every card and breaks
+        // mid-parenthetical, so "(589 /" ends one line and "4771)" starts the
+        // next. An explicit break puts the share on one line and the ratio it
+        // came from on the next, both centred with the rest of the card text.
+        return $"{FormatValue(percent)}%\n{agg.TotalEffective} / {total}";
     }
 
     private static long _damageShareTotal;

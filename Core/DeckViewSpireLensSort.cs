@@ -90,13 +90,13 @@ internal sealed class DeckSortMetric
 internal static class DeckViewSpireLensSort
 {
     internal const string GroupDamage = "Damage";
-    internal const string GroupDefense = "Defense";
+    internal const string GroupBlock = "Block";
     internal const string GroupCost = "Cost";
     internal const string GroupFlow = "Flow";
 
     /// <summary>Section order in the menu.</summary>
     internal static readonly IReadOnlyList<string> Groups =
-        new[] { GroupDamage, GroupDefense, GroupCost, GroupFlow };
+        new[] { GroupDamage, GroupBlock, GroupCost, GroupFlow };
 
     /// <summary>
     /// Every metric mirrors a row the card tooltip already prints, so a number
@@ -147,9 +147,9 @@ internal static class DeckViewSpireLensSort
 
         // Block generated, and the part of it that actually ate damage. The
         // gap between the two is block you paid for and never used.
-        new DeckSortMetric("block_gained", "Block gained", GroupDefense,
+        new DeckSortMetric("block_gained", "Block gained", GroupBlock,
             agg => agg.TotalBlockGained),
-        new DeckSortMetric("block_absorbed", "Block absorbed", GroupDefense,
+        new DeckSortMetric("block_absorbed", "Block absorbed", GroupBlock,
             agg => agg.TotalBlockEffective),
 
         // What the card charged you: energy actually paid (not printed cost),

@@ -1,0 +1,44 @@
+{
+  "run_id": "panache-power-damage-run",
+  "started_at": "2026-07-29T23:00:00Z",
+  "updated_at": "2026-07-29T23:18:00Z",
+  "character": "IRONCLAD",
+  "ascension": 7,
+  "floor_reached": 21,
+  "outcome": "in_progress",
+  "game_start_time": 1785366000,
+  "aggregates": {
+    "CARD.AGGRESSION#1": {
+      "combats_in_deck": 4,
+      "plays": 2,
+      "times_drawn": 5,
+      "floor_added": 6,
+      "initial_upgrade_level": 0
+    }
+  },
+  "events": [],
+  "relic_aggregates": {},
+  "enemy_aggregates": {},
+  "meta_stats": {
+    "power_aggregates": {
+      "POWER.PANACHE_POWER": {
+        "power_id": "POWER.PANACHE_POWER",
+        "display_name": "Panache",
+        "successful_applications": 3,
+        "total_intended": 42,
+        "total_blocked": 6,
+        "total_overkill": 4,
+        "total_effective": 32,
+        "kills": 2
+      }
+    }
+  },
+  "instance_numbers_by_def": {
+    "CARD.AGGRESSION": [
+      1
+    ]
+  },
+  "def_counters": {
+    "CARD.AGGRESSION": 1
+  }
+}

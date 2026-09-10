@@ -701,6 +701,11 @@ New fixtures added going forward do not need a `v*-` prefix.
   Adds the curse and status-card subsets of the per-card "exhausted others"
   count, so exhaust-enabler cards can say what kind of card they removed.
 
+- `panache-power-damage-run.json`
+  Damage recorded against a pooled power aggregate. Panache is the only power
+  in the game that deals damage itself, so these are the first damage fields
+  PowerAggregate has carried.
+
 Why these exist:
 
 - new shape work should be validated against real checked-in examples, not memory

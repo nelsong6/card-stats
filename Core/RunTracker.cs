@@ -3631,6 +3631,10 @@ public static class RunTracker
                     {
                         break;
                     }
+                    else if (trackCardStats && !dre.Receiver.IsPlayer && TryRecordPanacheDamage(dre))
+                    {
+                        break;
+                    }
                     else
                     {
                         if (!dre.Receiver.IsPlayer)
@@ -35754,6 +35758,93 @@ public static class RunTracker
     // across a whole multi-iteration burst.
     private const int PoisonTickMaxHistoryDistance = 24;
 
+    private const int PanacheDamageMaxHistoryDistance = 24;
+
+    /// <summary>
+    /// Arm the Panache attribution window as the power begins its strike.
+    ///
+    /// Panache deals its damage from AfterCardPlayed through the creature
+    /// overload of CreatureCmd.Damage, which passes cardSource null, so the
+    /// resulting DamageReceivedEntry carries no card and the tracker would
+    /// otherwise drop it. It hits every hittable enemy in one command, so the
+    /// window stays open for the whole fan-out rather than consuming once.
+    /// </summary>
+    public static void NotePanacheDamageStarted(object panachePower)
+    {
+        lock (_lock)
+        {
+            try
+            {
+                if (!ShouldTrackCardStatsDuringCombatLocked()) return;
+                if (panachePower is not PowerModel power) return;
+
+                var owner = GetPowerReceiverCreature(power);
+                if (owner == null) return;
+
+                _pendingCombat ??= new PendingCombat();
+                _pendingCombat.PanacheDamage = new PanacheDamageWindow(
+                    power,
+                    owner,
+                    CombatManager.Instance?.History?.Entries?.Count() ?? 0);
+            }
+            catch (Exception e)
+            {
+                CoreMain.LogDebug($"NotePanacheDamageStarted failed: {e.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Claim one anonymous damage entry for Panache, if it is plainly Panache's.
+    ///
+    /// Deliberately narrow, per the primer's rule for downstream attribution:
+    /// the entry must carry no card source, be dealt BY the power's owner (a
+    /// poison tick has no dealer at all, which is what separates the two), land
+    /// on an enemy, and arrive within a bounded distance of the arm. Anything
+    /// looser would start claiming unrelated player damage.
+    /// </summary>
+    private static bool TryRecordPanacheDamage(DamageReceivedEntry entry)
+    {
+        lock (_lock)
+        {
+            var window = _pendingCombat?.PanacheDamage;
+            if (window == null) return false;
+            if (entry.Dealer == null || !ReferenceEquals(entry.Dealer, window.Owner)) return false;
+
+            var historyCount = CombatManager.Instance?.History?.Entries?.Count() ?? 0;
+            var delta = historyCount - window.ArmedAtHistoryCount;
+            if (delta < 0 || delta > PanacheDamageMaxHistoryDistance)
+            {
+                _pendingCombat!.PanacheDamage = null;
+                return false;
+            }
+
+            if (!MetaPowerRegistry.TryGetByPower(window.Power, out var definition)
+                || definition == null)
+            {
+                return false;
+            }
+
+            var aggregate = GetOrCreatePowerAggregate(
+                _pendingCombat.MetaStats,
+                definition.PowerId,
+                definition.DisplayName);
+
+            var totals = ComputeEnemyDamageTotals(
+                entry.Result.BlockedDamage,
+                entry.Result.UnblockedDamage,
+                entry.Result.OverkillDamage);
+
+            aggregate.TotalIntended += (int)totals.IntendedDamage;
+            aggregate.TotalBlocked += entry.Result.BlockedDamage;
+            aggregate.TotalOverkill += entry.Result.OverkillDamage;
+            aggregate.TotalEffective += entry.Result.UnblockedDamage;
+            if (entry.Result.WasTargetKilled) aggregate.Kills++;
+
+            return true;
+        }
+    }
+
     private static bool TryRecordPoisonTickDamage(DamageReceivedEntry entry)
     {
         lock (_lock)
@@ -36939,6 +37030,11 @@ public static class RunTracker
             MergeCardOrbOutcomesInto(
                 targetAgg.OrbOutcomes,
                 sourceAgg.OrbOutcomes);
+            targetAgg.TotalIntended += sourceAgg.TotalIntended;
+            targetAgg.TotalBlocked += sourceAgg.TotalBlocked;
+            targetAgg.TotalOverkill += sourceAgg.TotalOverkill;
+            targetAgg.TotalEffective += sourceAgg.TotalEffective;
+            targetAgg.Kills += sourceAgg.Kills;
             targetAgg.RateAttacksCopied += sourceAgg.RateAttacksCopied;
             targetAgg.RateTimesTriggered += sourceAgg.RateTimesTriggered;
             targetAgg.RateBlockGained += sourceAgg.RateBlockGained;
@@ -37870,6 +37966,16 @@ internal sealed record OrbGenerationPowerWindow(
 /// Holds per-combat stats and events while a combat is in progress.
 /// Discarded if the combat doesn't finish cleanly; promoted into the run on CombatEnded.
 /// </summary>
+/// <summary>
+/// A Panache power mid-strike: who owns it, and how far into the combat
+/// history the strike was armed. Damage is claimed only from the owner, only
+/// without a card source, and only within a bounded distance of the arm.
+/// </summary>
+internal sealed record PanacheDamageWindow(
+    PowerModel Power,
+    Creature Owner,
+    int ArmedAtHistoryCount);
+
 internal class PendingCombat
 {
     public int EtherealCardsPlayed { get; set; }
@@ -37910,6 +38016,14 @@ internal class PendingCombat
         = new(ReferenceEqualityComparer.Instance);
     public Dictionary<Creature, Dictionary<PoisonOwnershipKey, PoisonOwnershipShare>> PoisonOwnershipByTarget { get; }
         = new(ReferenceEqualityComparer.Instance);
+    /// <summary>
+    /// Open while Panache is dealing its damage. Panache is the only power in
+    /// the game that deals damage itself, and it does so through the creature
+    /// overload of CreatureCmd.Damage, which passes cardSource null — so the
+    /// damage arrives anonymous and would otherwise be dropped.
+    /// </summary>
+    public PanacheDamageWindow? PanacheDamage { get; set; }
+
     public Dictionary<Creature, PendingPoisonTick> PendingPoisonTicks { get; }
         = new(ReferenceEqualityComparer.Instance);
     public Dictionary<OrbModel, PendingOrbSource> OrbSourceByOrb { get; }

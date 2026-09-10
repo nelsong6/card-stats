@@ -39,6 +39,7 @@ public static class CardHoverShowPatch
     private const string EntropyCardId = "CARD.ENTROPY";
     private const string FeelNoPainCardId = "CARD.FEEL_NO_PAIN";
     private const string JugglingCardId = "CARD.JUGGLING";
+    private const string PanacheCardId = "CARD.PANACHE";
     private const string RuptureCardId = "CARD.RUPTURE";
     private const string StampedeCardId = "CARD.STAMPEDE";
     private const string UnmovableCardId = "CARD.UNMOVABLE";
@@ -1086,6 +1087,29 @@ public static class CardHoverShowPatch
                     GetDrawStatLabel("cards drawn"),
                     aggregate.ViciousCardsDrawn.ToString(),
                     "");
+                break;
+
+            // Panache is the only power that deals damage itself, so it is the
+            // only one with damage rows. Same labels as a card's, because it
+            // is the same measurement: effective damage is HP actually removed.
+            case PanacheCardId:
+                Row3(sb, "Total damage", aggregate.TotalEffective.ToString(), "");
+                if (aggregate.TotalIntended > 0)
+                {
+                    Row3(
+                        sb,
+                        "Overkill",
+                        aggregate.TotalOverkill.ToString(),
+                        $"{100f * aggregate.TotalOverkill / aggregate.TotalIntended:F0}%");
+                    Row3(
+                        sb,
+                        "Blocked",
+                        aggregate.TotalBlocked.ToString(),
+                        $"{100f * aggregate.TotalBlocked / aggregate.TotalIntended:F0}%");
+                }
+
+                if (aggregate.Kills > 0)
+                    Row3(sb, "Kills", aggregate.Kills.ToString(), "");
                 break;
 
             case BufferCardId:

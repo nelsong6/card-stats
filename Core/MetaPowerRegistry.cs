@@ -56,6 +56,7 @@ internal static class MetaPowerRegistry
         Add<FeelNoPain, FeelNoPainPower>("Feel No Pain");
         Add<HelloWorld, HelloWorldPower>("Hello World");
         Add<Juggling, JugglingPower>("Juggling");
+        Add<Panache, PanachePower>("Panache");
         Add<Rupture, RupturePower>("Rupture");
         Add<SpectrumShift, SpectrumShiftPower>("Spectrum Shift");
         Add<Spinner, SpinnerPower>("Spinner");

@@ -71,6 +71,7 @@ public class NotInDeckViewTests
                 "CARD.FEEL_NO_PAIN",
                 "CARD.HELLO_WORLD",
                 "CARD.JUGGLING",
+                "CARD.PANACHE",
                 "CARD.RUPTURE",
                 "CARD.SPECTRUM_SHIFT",
                 "CARD.SPINNER",

@@ -7049,6 +7049,51 @@ public class SchemaLoadingTests
         Assert.Equal(0, agg.TimesExhaustedOtherStatusCards);
     }
 
+    [Fact]
+    public void HistoricalLoad_AcceptsPanachePowerDamageFixture()
+    {
+        var loaded = RunStorage.LoadHistorical(
+            FixturePath("panache-power-damage-run.json"));
+
+        Assert.NotNull(loaded);
+        Assert.True(loaded!.SupportsResume);
+        AssertPanachePowerDamageFixture(
+            loaded.Data.MetaStats.PowerAggregates["POWER.PANACHE_POWER"]);
+    }
+
+    [Fact]
+    public void ResumableLoad_AcceptsPanachePowerDamageFixture()
+    {
+        var resumed = RunStorage.LoadResumable(
+            FixturePath("panache-power-damage-run.json"));
+
+        Assert.NotNull(resumed);
+        AssertPanachePowerDamageFixture(
+            resumed!.MetaStats.PowerAggregates["POWER.PANACHE_POWER"]);
+    }
+
+    [Fact]
+    public void HistoricalLoad_DefaultsPowerDamageForOlderFixtures()
+    {
+        var loaded = RunStorage.LoadHistorical(
+            FixturePath("aggression-power-run.json"));
+
+        Assert.NotNull(loaded);
+        var agg = loaded!.Data.MetaStats.PowerAggregates["POWER.AGGRESSION"];
+        Assert.Equal(0, agg.TotalIntended);
+        Assert.Equal(0, agg.TotalEffective);
+        Assert.Equal(0, agg.Kills);
+    }
+
+    private static void AssertPanachePowerDamageFixture(PowerAggregate powerAgg)
+    {
+        Assert.Equal(42, powerAgg.TotalIntended);
+        Assert.Equal(6, powerAgg.TotalBlocked);
+        Assert.Equal(4, powerAgg.TotalOverkill);
+        Assert.Equal(32, powerAgg.TotalEffective);
+        Assert.Equal(2, powerAgg.Kills);
+    }
+
     private static void AssertExhaustedOtherCardTypesFixture(CardAggregate cardAgg)
     {
         Assert.Equal(7, cardAgg.TimesExhaustedOtherCards);

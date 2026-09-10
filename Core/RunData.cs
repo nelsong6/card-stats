@@ -836,6 +836,16 @@ public class PowerAggregate
     // denominators above. Lifetime totals predate these denominators in saved
     // runs, so dividing those older totals by newer denominators would create
     // false rates.
+    // Damage a power dealt itself, as opposed to damage from a card play.
+    // Panache is the first power in the game to deal any, so these are the
+    // first damage fields PowerAggregate has ever needed. Named to match the
+    // equivalents on CardAggregate so the tooltip vocabulary lines up.
+    public int TotalIntended { get; set; }
+    public int TotalBlocked { get; set; }
+    public int TotalOverkill { get; set; }
+    public int TotalEffective { get; set; }
+    public int Kills { get; set; }
+
     public int RateAttacksCopied { get; set; }
     public int RateTimesTriggered { get; set; }
     public decimal RateBlockGained { get; set; }

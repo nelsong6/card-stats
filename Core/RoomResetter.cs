@@ -14,11 +14,20 @@ using MegaCrit.Sts2.Core.Saves;
 namespace SpireLens.Core;
 
 /// <summary>
-/// What a restart would replay right now. Exactly one of the two is non-null:
-/// <see cref="RoomNoun"/> names the room a restart would replay ("combat",
-/// "shop", "event"), or <see cref="BlockedReason"/> says why none can be.
+/// What a restart would replay right now. Either <see cref="RoomNoun"/> names
+/// what a restart would replay ("combat", "shop", "rest site"), or
+/// <see cref="BlockedReason"/> says why nothing can be.
+///
+/// <see cref="ReplayNote"/> describes where the replay actually lands, because
+/// that differs by room. Replaying a fight already won returns you to its
+/// reward screen rather than to the top of the fight — a real destination, and
+/// often the wanted one, so it is offered and described honestly rather than
+/// refused for not being the start of the room.
 /// </summary>
-public readonly record struct RoomRestartAvailability(string? RoomNoun, string? BlockedReason)
+public readonly record struct RoomRestartAvailability(
+    string? RoomNoun,
+    string? BlockedReason,
+    string? ReplayNote = null)
 {
     public bool CanRestart => BlockedReason == null;
 }
@@ -121,28 +130,43 @@ public static class RoomResetter
             {
                 case CombatRoom:
                     // Victory rewrites the save with the room marked
-                    // pre-finished, so replaying it lands back on the reward
-                    // screen instead of at the top of the fight.
-                    return combatRunning ? Available("combat") : Blocked("this fight is already over");
+                    // pre-finished, so replaying lands on the reward screen
+                    // rather than at the top of the fight. That is a place
+                    // worth going back to, so offer it and say where it goes.
+                    return combatRunning
+                        ? Available("combat", FromTheStart)
+                        : Available("combat rewards", ToTheRewardScreen);
 
                 case MerchantRoom:
                     // Merchants never save. The whole visit is replayable.
-                    return Available("shop");
+                    return Available("shop", FromTheStart);
+
+                // Rest sites and treasure rooms write no save either, exactly
+                // like merchants, so the same replay works for them.
+                case RestSiteRoom:
+                    return Available("rest site", FromTheStart);
+
+                case TreasureRoom:
+                    return Available("treasure room", FromTheStart);
 
                 case EventRoom eventRoom:
                     // Ancient events are the one event kind that saves on
-                    // completion (EventRoom.OnEventStateChanged).
-                    if (eventRoom.IsPreFinished) return Blocked("this event is already over");
+                    // completion (EventRoom.OnEventStateChanged), and an event
+                    // option that started a fight leaves that fight's victory
+                    // save behind. Both replay to just after the thing
+                    // resolved rather than to the room's start.
+                    if (eventRoom.IsPreFinished)
+                        return Available("event", AfterItResolved);
 
-                    // An event option that started a fight leaves that fight's
-                    // victory save behind once it is won.
                     if (FoughtAtCurrentMapPoint(state) && !combatRunning)
-                        return Blocked("this event's fight is already over");
+                        return Available("event rewards", ToTheRewardScreen);
 
-                    return Available("event");
+                    return Available("event", FromTheStart);
 
                 default:
-                    return Blocked("not a combat, shop, or event");
+                    // Every room type the game has is handled above, so this is
+                    // the map itself, where there is no room to replay.
+                    return Blocked("no room to restart");
             }
         }
         catch (Exception e)
@@ -173,7 +197,15 @@ public static class RoomResetter
         return true;
     }
 
-    private static RoomRestartAvailability Available(string roomNoun) => new(roomNoun, null);
+    private const string FromTheStart =
+        "replays it from the start, undoing everything you did here";
+    private const string ToTheRewardScreen =
+        "replays the reward screen, so you can pick again";
+    private const string AfterItResolved =
+        "replays from just after it resolved";
+
+    private static RoomRestartAvailability Available(string roomNoun, string replayNote)
+        => new(roomNoun, null, replayNote);
 
     private static RoomRestartAvailability Blocked(string reason) => new(null, reason);
 

@@ -565,7 +565,10 @@ public static class SpireLensOptionsMenu
         var noun = availability.RoomNoun;
         _restartRoomButton.Text = _restartArmed
             ? $"Restart this {noun}  —  select again to confirm"
-            : $"Restart this {noun}  —  replays it from the start, undoing everything you did here";
+            // The note comes from the availability, because where a replay
+            // lands differs by room: a finished fight returns to its reward
+            // screen, not to the top of the fight.
+            : $"Restart this {noun}  —  {availability.ReplayNote}";
         _restartRoomButton.Modulate = _restartArmed
             ? new Color(1f, 0.68f, 0.4f)
             : new Color(1f, 1f, 1f);

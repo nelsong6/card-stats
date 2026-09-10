@@ -52,6 +52,49 @@ public static class RunStorage
     /// <summary>Resolved absolute path to runs/ directory. Created on first save.</summary>
     public static string RunsDir => ProjectSettings.GlobalizePath("user://SpireLens/runs/");
 
+    // Deliberately NOT under RunsDir: that directory is enumerated with
+    // "*.json" to find run records, and a snapshot sitting in it would be
+    // read back as one.
+    public static string RoomEntryDir =>
+        ProjectSettings.GlobalizePath("user://SpireLens/room-entry/");
+
+    /// <summary>
+    /// Persist the room-entry snapshot so it survives a Core hot reload. Best
+    /// effort: failing to write one only costs the restart button until the
+    /// next room, so it must never disturb room entry.
+    /// </summary>
+    public static void SaveRoomEntrySnapshot(string? runId, string? json)
+    {
+        if (string.IsNullOrWhiteSpace(runId) || json == null) return;
+
+        try
+        {
+            Directory.CreateDirectory(RoomEntryDir);
+            File.WriteAllText(Path.Combine(RoomEntryDir, runId + ".json"), json);
+        }
+        catch (Exception e)
+        {
+            CoreMain.LogDebug($"SaveRoomEntrySnapshot failed: {e.Message}");
+        }
+    }
+
+    /// <summary>Read back a snapshot for this run, or null if there is none.</summary>
+    public static string? LoadRoomEntrySnapshot(string? runId)
+    {
+        if (string.IsNullOrWhiteSpace(runId)) return null;
+
+        try
+        {
+            var path = Path.Combine(RoomEntryDir, runId + ".json");
+            return File.Exists(path) ? File.ReadAllText(path) : null;
+        }
+        catch (Exception e)
+        {
+            CoreMain.LogDebug($"LoadRoomEntrySnapshot failed: {e.Message}");
+            return null;
+        }
+    }
+
     // Single-writer chain: every save is a continuation of the previous one,
     // so writes to the same run file apply in the exact order SaveAsync was
     // called (which, since callers hold RunTracker's lock and serialize the

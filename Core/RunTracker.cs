@@ -1548,9 +1548,8 @@ public static class RunTracker
         {
             lock (_lock)
             {
-                return _roomEntrySnapshotJson != null
-                    && _currentRun != null
-                    && _roomEntrySnapshotRunId == _currentRun.RunId;
+                return _currentRun != null
+                    && EnsureRoomEntrySnapshotLoadedLocked() != null;
             }
         }
     }
@@ -1568,6 +1567,33 @@ public static class RunTracker
     /// overwriting the snapshot there would rewind to the middle of the event
     /// instead of its start.
     /// </summary>
+    /// <summary>
+    /// The snapshot for the current run, reloading it from disk when this Core
+    /// load has none in memory.
+    ///
+    /// It is held in memory for speed but written at capture, because a Core
+    /// hot reload otherwise loses it and the restart button stays refused for
+    /// the rest of the room — which, during development, is most of the time.
+    /// Caller must hold the lock.
+    /// </summary>
+    private static string? EnsureRoomEntrySnapshotLoadedLocked()
+    {
+        if (_currentRun == null) return null;
+
+        if (_roomEntrySnapshotJson != null
+            && _roomEntrySnapshotRunId == _currentRun.RunId)
+        {
+            return _roomEntrySnapshotJson;
+        }
+
+        var loaded = RunStorage.LoadRoomEntrySnapshot(_currentRun.RunId);
+        if (loaded == null) return null;
+
+        _roomEntrySnapshotJson = loaded;
+        _roomEntrySnapshotRunId = _currentRun.RunId;
+        return loaded;
+    }
+
     public static void CaptureRoomEntrySnapshot(IRunState? runState)
     {
         lock (_lock)
@@ -1580,6 +1606,9 @@ public static class RunTracker
                 _roomEntrySnapshotJson =
                     JsonSerializer.Serialize(_currentRun, RunStorage.Options);
                 _roomEntrySnapshotRunId = _currentRun.RunId;
+                RunStorage.SaveRoomEntrySnapshot(
+                    _roomEntrySnapshotRunId,
+                    _roomEntrySnapshotJson);
             }
             catch (Exception e)
             {
@@ -1616,11 +1645,13 @@ public static class RunTracker
         {
             try
             {
-                if (_currentRun == null || _roomEntrySnapshotJson == null) return false;
-                if (_roomEntrySnapshotRunId != _currentRun.RunId) return false;
+                if (_currentRun == null) return false;
+
+                var json = EnsureRoomEntrySnapshotLoadedLocked();
+                if (json == null) return false;
 
                 var restored = JsonSerializer.Deserialize<RunData>(
-                    _roomEntrySnapshotJson,
+                    json,
                     RunStorage.Options);
                 if (restored == null) return false;
 
